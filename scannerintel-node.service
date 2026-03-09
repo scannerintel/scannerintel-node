@@ -1,0 +1,23 @@
+[Unit]
+Description=ScannerIntel Node Client
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=scannerintel
+ExecStart=/usr/local/bin/scannerintel-node --config /etc/scannerintel/config.yml
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scannerintel-node
+
+# Prevent the service from accessing unnecessary system resources
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

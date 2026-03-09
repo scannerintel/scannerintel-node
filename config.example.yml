@@ -1,0 +1,36 @@
+# ScannerIntel Node Configuration
+# Copy to config.yml and fill in your details
+
+server:
+  url: https://scannerintel.com
+  api_key: sk_live_your_key_here
+
+node:
+  device_index: 1           # RTL-SDR device index (run rtl_test to find yours)
+  gain: 40                  # SDR gain in dB (0-50, or 'auto')
+  chunk_duration: 15        # seconds per audio chunk (5-30)
+  sample_rate: 22050        # audio sample rate in Hz
+  squelch: -30              # squelch threshold in dB (signals below this are silence)
+  bias_tee: true            # enable bias tee for active antennas (RTL-SDR V4)
+  location:
+    lat: null               # optional: your latitude
+    lon: null               # optional: your longitude
+    description: null       # optional: "rooftop near CVG airport"
+
+channels:
+  - index: 0
+    frequency: 162.550      # MHz
+    modulation: fm          # fm or am (use am for aviation)
+    description: "NOAA Weather Radio"
+  - index: 1
+    frequency: 155.172
+    modulation: fm
+    description: "NKY Fire/EMS Dispatch"
+  - index: 2
+    frequency: 125.000
+    modulation: am
+    description: "CVG Approach"
+  - index: 3
+    frequency: 133.000
+    modulation: am
+    description: "ZID Indianapolis Center"
