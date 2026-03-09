@@ -5,6 +5,7 @@ REPO="https://raw.githubusercontent.com/scannerintel/scannerintel-node/main"
 INSTALL_DIR="/opt/scannerintel-node"
 CONFIG_DIR="/etc/scannerintel"
 SERVICE_USER="scannerintel"
+API_URL="https://scannerintel.com"
 
 echo ""
 echo "╔═══════════════════════════════════════╗"
@@ -27,7 +28,7 @@ echo "Detected: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '
 echo ""
 echo "-> Installing dependencies..."
 apt-get update -qq
-apt-get install -y -qq rtl-sdr sox python3 python3-pip python3-yaml
+apt-get install -y -qq rtl-sdr ffmpeg python3 python3-pip python3-yaml curl jq
 
 # Install Python requests if not available via apt
 pip3 install requests --quiet --break-system-packages 2>/dev/null || \
@@ -47,7 +48,7 @@ mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
 
 # Download node files
-for f in main.py sdr.py chunker.py uploader.py classifier.py config.py logger.py; do
+for f in main.py sdr.py chunker.py uploader.py streamer.py classifier.py config.py logger.py; do
     curl -sSL "$REPO/node/$f" -o "$INSTALL_DIR/$f"
 done
 
@@ -80,8 +81,8 @@ echo "============================================="
 echo "         Node Setup                          "
 echo "============================================="
 echo ""
-echo "Your API key will be generated automatically"
-echo "when the node first connects to scannerintel.com."
+echo "The server assigns your monitoring frequency"
+echo "automatically based on coverage gaps near you."
 echo ""
 
 # SDR device index
@@ -103,53 +104,13 @@ echo "Optional: coordinates for the coverage map."
 read -r -p "Latitude (press Enter to skip): " LAT
 read -r -p "Longitude (press Enter to skip): " LON
 
-# Channels
-echo ""
-echo "Add frequencies to monitor. Type 'done' when finished."
-echo "  Example: 162.550 fm NOAA Weather Radio"
-echo ""
-
-CHANNELS_YAML=""
-CH_INDEX=0
-
-while true; do
-    read -r -p "Frequency in MHz (or 'done'): " FREQ
-    [ "$FREQ" = "done" ] && break
-    [ -z "$FREQ" ] && break
-
-    read -r -p "  Modulation (fm/am) [fm]: " MOD
-    MOD="${MOD:-fm}"
-
-    read -r -p "  Description: " DESC
-
-    CHANNELS_YAML="${CHANNELS_YAML}
-  - index: ${CH_INDEX}
-    frequency: ${FREQ}
-    modulation: ${MOD}
-    description: \"${DESC}\""
-
-    CH_INDEX=$((CH_INDEX + 1))
-    echo "  -> Added channel ${CH_INDEX}: ${FREQ} MHz ${MOD}"
-    echo ""
-done
-
-if [ "$CH_INDEX" -eq 0 ]; then
-    echo ""
-    echo "WARNING: No channels configured. Add channels to $CONFIG_DIR/config.yml before starting."
-    CHANNELS_YAML="
-  - index: 0
-    frequency: 162.550
-    modulation: fm
-    description: \"NOAA Weather Radio\""
-fi
-
 # Build config.yml
 cat > "$CONFIG_DIR/config.yml" << CFGEOF
 # ScannerIntel Node Configuration
-# API key is generated automatically on first registration.
+# Frequency is assigned automatically by the server.
 
 server:
-  url: https://scannerintel.com
+  url: $API_URL
 CFGEOF
 
 if [ -n "$EMAIL" ]; then
@@ -161,11 +122,9 @@ cat >> "$CONFIG_DIR/config.yml" << CFGEOF
 
 node:
   device_index: ${DEVICE_INDEX}
-  gain: 40
-  chunk_duration: 15
-  sample_rate: 22050
-  squelch: -30
-  bias_tee: true
+  gain: 49
+  sample_rate: 48000
+  bias_tee: false
   location:
 CFGEOF
 
@@ -183,29 +142,80 @@ else
     echo "    description: null" >> "$CONFIG_DIR/config.yml"
 fi
 
-cat >> "$CONFIG_DIR/config.yml" << CFGEOF
+echo ""
+echo "-> Config written to $CONFIG_DIR/config.yml"
 
-channels:${CHANNELS_YAML}
-CFGEOF
+# ---------------------------------------------------------------------------
+# Register with server to show assigned facility
+# ---------------------------------------------------------------------------
+echo ""
+echo "-> Registering with ScannerIntel..."
+
+# Build hardware fingerprint the same way the Python client does
+HW_FINGERPRINT=""
+CPU_SERIAL=$(cat /proc/cpuinfo 2>/dev/null | grep "^Serial" | awk -F: '{print $2}' | tr -d ' ' || true)
+MAC_ADDR=$(cat /sys/class/net/eth0/address 2>/dev/null || true)
+
+if [ -n "$CPU_SERIAL" ] || [ -n "$MAC_ADDR" ]; then
+    FP_INPUT=""
+    [ -n "$CPU_SERIAL" ] && FP_INPUT="${CPU_SERIAL}"
+    [ -n "$MAC_ADDR" ] && FP_INPUT="${FP_INPUT:+${FP_INPUT}|}${MAC_ADDR}"
+    HW_FINGERPRINT=$(echo -n "$FP_INPUT" | sha256sum | awk '{print $1}')
+else
+    FP_INPUT="$(hostname)|$(uname -m)"
+    HW_FINGERPRINT=$(echo -n "$FP_INPUT" | sha256sum | awk '{print $1}')
+fi
+
+# Build registration JSON
+REG_JSON="{\"hardware_fingerprint\":\"${HW_FINGERPRINT}\",\"software_version\":\"1.0.0\",\"platform\":\"linux_${ARCH}\"}"
+
+if [ -n "$EMAIL" ]; then
+    REG_JSON=$(echo "$REG_JSON" | jq --arg e "$EMAIL" '. + {email: $e}')
+fi
+if [ -n "$LAT" ] && [ -n "$LON" ]; then
+    REG_JSON=$(echo "$REG_JSON" | jq --argjson lat "$LAT" --argjson lon "$LON" '. + {latitude: $lat, longitude: $lon}')
+fi
+if [ -n "$LOCATION_DESC" ]; then
+    REG_JSON=$(echo "$REG_JSON" | jq --arg d "$LOCATION_DESC" '. + {location_description: $d}')
+fi
+
+REG_RESP=$(curl -sS -X POST \
+    -H "Content-Type: application/json" \
+    -d "$REG_JSON" \
+    "${API_URL}/api/v1/nodes/register" 2>&1) || true
+
+# Parse response
+FACILITY_NAME=$(echo "$REG_RESP" | jq -r '.assigned_facility.name // empty' 2>/dev/null || true)
+FACILITY_FREQ=$(echo "$REG_RESP" | jq -r '.assigned_facility.frequency_hz // empty' 2>/dev/null || true)
+FACILITY_MOD=$(echo "$REG_RESP" | jq -r '.assigned_facility.modulation // empty' 2>/dev/null || true)
+
+echo ""
+if [ -n "$FACILITY_FREQ" ] && [ "$FACILITY_FREQ" != "null" ]; then
+    FREQ_MHZ=$(echo "scale=3; $FACILITY_FREQ / 1000000" | bc)
+    MOD_UPPER=$(echo "$FACILITY_MOD" | tr '[:lower:]' '[:upper:]')
+    if [ -n "$FACILITY_NAME" ] && [ "$FACILITY_NAME" != "null" ]; then
+        echo "  You've been assigned: $FACILITY_NAME $FREQ_MHZ MHz $MOD_UPPER"
+    else
+        echo "  You've been assigned: $FREQ_MHZ MHz $MOD_UPPER"
+    fi
+else
+    echo "  No coverage gaps in your area right now."
+    echo "  Check back later or visit scannerintel.com/contribute"
+fi
 
 echo ""
 echo "============================================="
 echo "         Installation complete!              "
 echo "============================================="
 echo ""
-echo "  Config written to: $CONFIG_DIR/config.yml"
-echo ""
 echo "  Next steps:"
 echo ""
-echo "  1. Scan for active frequencies near you:"
-echo "     scannerintel-node --scan"
-echo ""
-echo "  2. Test hardware + registration:"
+echo "  1. Test hardware + registration:"
 echo "     scannerintel-node --test"
 echo ""
-echo "  3. Start the node:"
+echo "  2. Start the node:"
 echo "     sudo systemctl enable --now scannerintel-node"
 echo ""
-echo "  4. Check logs:"
+echo "  3. Check logs:"
 echo "     journalctl -u scannerintel-node -f"
 echo ""

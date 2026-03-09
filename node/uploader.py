@@ -5,15 +5,23 @@ import platform
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 
-from chunker import AudioChunk
 
 STATE_FILE = os.path.expanduser('~/.scannerintel/state.json')
+
+
+@dataclass
+class AssignedFacility:
+    frequency_hz: int
+    modulation: str
+    stream_key: str
+    name: Optional[str] = None
 
 
 @dataclass
 class NodeState:
     device_id: str
     api_key: str
+    facility: Optional[AssignedFacility] = None
 
 
 class Uploader:
@@ -25,7 +33,7 @@ class Uploader:
             'User-Agent': 'scannerintel-node/1.0.0',
         })
 
-    def register(self, hardware_fingerprint: str, channels: List[Dict],
+    def register(self, hardware_fingerprint: str,
                  email: Optional[str] = None,
                  lat: Optional[float] = None,
                  lon: Optional[float] = None,
@@ -35,7 +43,6 @@ class Uploader:
             'hardware_fingerprint': hardware_fingerprint,
             'software_version': '1.0.0',
             'platform': self._get_platform(),
-            'detected_channels': channels,
         }
         if email:
             payload['email'] = email
@@ -53,32 +60,41 @@ class Uploader:
         resp.raise_for_status()
         data = resp.json()
 
+        facility = None
+        af = data.get('assigned_facility')
+        if af:
+            facility = AssignedFacility(
+                frequency_hz=af['frequency_hz'],
+                modulation=af['modulation'],
+                stream_key=af['stream_key'],
+                name=af.get('name'),
+            )
+
         state = NodeState(
             device_id=data['device_id'],
             api_key=data['api_key'],
+            facility=facility,
         )
         self._save_state(state)
         self.state = state
         return state
 
-    def upload_chunk(self, chunk: AudioChunk) -> bool:
-        """Upload audio chunk. Returns True on success."""
+    def upload_segment(self, stream_key: str, segment_index: int,
+                       segment_bytes: bytes, duration_ms: int) -> bool:
+        """Upload an HLS segment. Returns True on success."""
         if not self.state:
             raise RuntimeError("Node not registered. Call register() first.")
 
         try:
             resp = self.session.post(
-                f'{self.server_url}/api/v1/ingest/chunk',
+                f'{self.server_url}/api/v1/stream/{stream_key}/segment',
                 headers={'Authorization': f'Bearer {self.state.api_key}'},
                 data={
-                    'node_id': self.state.device_id,
-                    'channel_index': str(chunk.channel_index),
-                    'frequency_hz': str(chunk.frequency_hz),
-                    'chunk_start_ts': chunk.timestamp,
-                    'duration_ms': str(chunk.duration_ms),
+                    'segment_index': str(segment_index),
+                    'duration_ms': str(duration_ms),
                 },
                 files={
-                    'audio': ('chunk.wav', chunk.wav_bytes, 'audio/wav'),
+                    'segment': ('segment.ts', segment_bytes, 'video/mp2t'),
                 },
                 timeout=30,
             )

@@ -1,22 +1,14 @@
 import yaml
 import os
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional
+
 
 CONFIG_PATHS = [
     './config.yml',
     os.path.expanduser('~/.scannerintel/config.yml'),
     '/etc/scannerintel/config.yml',
 ]
-
-
-@dataclass
-class ChannelConfig:
-    index: int
-    frequency: float        # MHz
-    modulation: str         # 'fm' or 'am'
-    description: str = ''
-    enabled: bool = True
 
 
 @dataclass
@@ -29,11 +21,9 @@ class LocationConfig:
 @dataclass
 class NodeConfig:
     device_index: int = 0
-    gain: float = 40
-    chunk_duration: int = 15
-    sample_rate: int = 22050
-    squelch: float = -30
-    bias_tee: bool = True
+    gain: float = 49
+    sample_rate: int = 48000
+    bias_tee: bool = False
     location: LocationConfig = field(default_factory=LocationConfig)
 
 
@@ -46,7 +36,6 @@ class ServerConfig:
 class Config:
     server: ServerConfig
     node: NodeConfig
-    channels: List[ChannelConfig]
     email: Optional[str] = None
 
 
@@ -78,11 +67,9 @@ def load_config(path: Optional[str] = None) -> Config:
     loc = n.get('location', {})
     node = NodeConfig(
         device_index=n.get('device_index', 0),
-        gain=n.get('gain', 40),
-        chunk_duration=n.get('chunk_duration', 15),
-        sample_rate=n.get('sample_rate', 22050),
-        squelch=n.get('squelch', -30),
-        bias_tee=n.get('bias_tee', True),
+        gain=n.get('gain', 49),
+        sample_rate=n.get('sample_rate', 48000),
+        bias_tee=n.get('bias_tee', False),
         location=LocationConfig(
             lat=loc.get('lat'),
             lon=loc.get('lon'),
@@ -90,31 +77,11 @@ def load_config(path: Optional[str] = None) -> Config:
         ),
     )
 
-    if not 5 <= node.chunk_duration <= 30:
-        raise ValueError("node.chunk_duration must be between 5 and 30 seconds")
-
-    # Channels
-    channels = []
-    for ch in raw.get('channels', []):
-        mod = ch.get('modulation', 'fm').lower()
-        if mod not in ('fm', 'am'):
-            raise ValueError(
-                f"Channel {ch.get('index')}: modulation must be 'fm' or 'am'"
-            )
-        channels.append(ChannelConfig(
-            index=ch['index'],
-            frequency=float(ch['frequency']),
-            modulation=mod,
-            description=ch.get('description', ''),
-            enabled=ch.get('enabled', True),
-        ))
-
-    if not channels:
-        raise ValueError("No channels configured in config.yml")
+    if not 0 <= node.gain <= 49:
+        raise ValueError("node.gain must be between 0 and 49")
 
     return Config(
         server=server,
         node=node,
-        channels=channels,
         email=raw.get('email'),
     )

@@ -1,9 +1,10 @@
 # ScannerIntel Node Configuration
-# Copy to config.yml and fill in your details
+# Copy to config.yml and fill in your details.
 #
-# Your API key is generated automatically when the node registers.
-# You do NOT need to set an API key -- just configure your channels
-# and run the node. The key is stored in ~/.scannerintel/state.json.
+# Your API key and monitoring frequency are assigned automatically
+# by the server when the node registers. You do NOT configure
+# frequencies here -- the server picks the best coverage gap near you.
+# State is stored in ~/.scannerintel/state.json.
 
 server:
   url: https://scannerintel.com
@@ -12,31 +13,11 @@ server:
 # email: you@example.com
 
 node:
-  device_index: 1           # RTL-SDR device index (run rtl_test to find yours)
-  gain: 40                  # SDR gain in dB (0-50, or 'auto')
-  chunk_duration: 15        # seconds per audio chunk (5-30)
-  sample_rate: 22050        # audio sample rate in Hz
-  squelch: -30              # squelch threshold in dB (signals below this are silence)
-  bias_tee: true            # enable bias tee for active antennas (RTL-SDR V4)
+  device_index: 0           # RTL-SDR device index (run rtl_test to find yours)
+  gain: 49                  # SDR gain in dB (0-49)
+  sample_rate: 48000        # audio sample rate in Hz
+  bias_tee: false           # enable bias tee for active antennas
   location:
-    lat: null               # optional: your latitude
+    lat: null               # optional: your latitude (shown on coverage map)
     lon: null               # optional: your longitude
     description: null       # optional: "rooftop near CVG airport"
-
-channels:
-  - index: 0
-    frequency: 162.550      # MHz
-    modulation: fm          # fm or am (use am for aviation)
-    description: "NOAA Weather Radio"
-  - index: 1
-    frequency: 155.172
-    modulation: fm
-    description: "NKY Fire/EMS Dispatch"
-  - index: 2
-    frequency: 125.000
-    modulation: am
-    description: "CVG Approach"
-  - index: 3
-    frequency: 133.000
-    modulation: am
-    description: "ZID Indianapolis Center"
