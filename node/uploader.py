@@ -17,10 +17,9 @@ class NodeState:
 
 
 class Uploader:
-    def __init__(self, server_url: str, api_key: str):
+    def __init__(self, server_url: str):
         self.server_url = server_url.rstrip('/')
-        self.api_key = api_key
-        self.state: Optional[NodeState] = self._load_state()
+        self.state: Optional[NodeState] = None
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'scannerintel-node/1.0.0',
@@ -32,9 +31,6 @@ class Uploader:
                  lon: Optional[float] = None,
                  description: Optional[str] = None) -> NodeState:
         """Register node with ScannerIntel API. Idempotent -- safe to call on every startup."""
-        if self.state:
-            return self.state
-
         payload = {
             'hardware_fingerprint': hardware_fingerprint,
             'software_version': '1.0.0',
@@ -52,7 +48,6 @@ class Uploader:
         resp = self.session.post(
             f'{self.server_url}/api/v1/nodes/register',
             json=payload,
-            headers={'Authorization': f'Bearer {self.api_key}'},
             timeout=30,
         )
         resp.raise_for_status()

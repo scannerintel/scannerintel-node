@@ -142,12 +142,6 @@ def main():
         print(f"ERROR: {e}")
         sys.exit(1)
     except ValueError as e:
-        if args.scan:
-            # Try to load config partially for scan mode
-            print(f"Config warning: {e}")
-            print("Using defaults for scan mode.\n")
-            run_scan(device_index=0, gain=40)
-            sys.exit(0)
         print(f"CONFIG ERROR: {e}")
         sys.exit(1)
 
@@ -176,7 +170,6 @@ def main():
     # Initialize uploader and register node
     uploader = Uploader(
         server_url=config.server.url,
-        api_key=config.server.api_key,
     )
 
     fingerprint = get_hardware_fingerprint()

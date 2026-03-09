@@ -1,9 +1,15 @@
 # ScannerIntel Node Configuration
 # Copy to config.yml and fill in your details
+#
+# Your API key is generated automatically when the node registers.
+# You do NOT need to set an API key -- just configure your channels
+# and run the node. The key is stored in ~/.scannerintel/state.json.
 
 server:
   url: https://scannerintel.com
-  api_key: sk_live_your_key_here
+
+# Optional: link this node to your ScannerIntel account for free premium
+# email: you@example.com
 
 node:
   device_index: 1           # RTL-SDR device index (run rtl_test to find yours)

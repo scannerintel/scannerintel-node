@@ -2,6 +2,7 @@ import subprocess
 import os
 import struct
 import math
+import time
 import tempfile
 import shutil
 from typing import List, Dict, Tuple
@@ -25,7 +26,7 @@ class SDRDevice:
 
         result = subprocess.run(
             ['rtl_test', '-d', str(self.device_index), '-t'],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=15,
         )
         combined = result.stderr + result.stdout
         if 'Failed to open' in combined:
@@ -87,11 +88,9 @@ class SDRDevice:
                     stdout=raw_out,
                     stderr=subprocess.PIPE,
                 )
-                try:
-                    proc.wait(timeout=duration_seconds + 2)
-                except subprocess.TimeoutExpired:
-                    proc.terminate()
-                    proc.wait()
+                time.sleep(duration_seconds)
+                proc.terminate()
+                proc.wait(timeout=5)
 
             # Convert raw PCM to WAV via sox
             sox_cmd = [

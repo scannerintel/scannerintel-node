@@ -40,7 +40,6 @@ class NodeConfig:
 @dataclass
 class ServerConfig:
     url: str = 'https://scannerintel.com'
-    api_key: str = ''
 
 
 @dataclass
@@ -72,11 +71,7 @@ def load_config(path: Optional[str] = None) -> Config:
     srv = raw.get('server', {})
     server = ServerConfig(
         url=srv.get('url', 'https://scannerintel.com'),
-        api_key=srv.get('api_key', ''),
     )
-
-    if not server.api_key or server.api_key == 'sk_live_your_key_here':
-        raise ValueError("server.api_key is not set in config.yml")
 
     # Node config
     n = raw.get('node', {})
