@@ -12,8 +12,8 @@ STATE_FILE = os.path.expanduser('~/.scannerintel/state.json')
 @dataclass
 class AssignedFacility:
     frequency_hz: int
-    modulation: str
     stream_key: str
+    modulation: str = 'am'
     name: Optional[str] = None
 
 
@@ -64,10 +64,10 @@ class Uploader:
         af = data.get('assigned_facility')
         if af:
             facility = AssignedFacility(
-                frequency_hz=af['frequency_hz'],
-                modulation=af['modulation'],
-                stream_key=af['stream_key'],
-                name=af.get('name'),
+                frequency_hz=af.get('frequency_hz'),
+                stream_key=af.get('stream_key'),
+                modulation=af.get('modulation', 'am'),
+                name=af.get('facility_name'),
             )
 
         state = NodeState(
