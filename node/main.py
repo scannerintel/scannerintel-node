@@ -11,6 +11,7 @@ import hashlib
 import platform
 import argparse
 import subprocess
+import threading
 from typing import Optional
 
 # Allow imports from the node package directory
@@ -19,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import load_config, Config
 from uploader import Uploader
 from streamer import Streamer
+from calibrate import Calibrator
 from logger import get_logger
 
 log = get_logger('main')
@@ -72,6 +74,10 @@ def main():
     parser.add_argument('--config', help='Path to config.yml')
     parser.add_argument('--test', action='store_true',
                         help='Test hardware and registration, then exit')
+    parser.add_argument('--calibrate', action='store_true',
+                        help='Force recalibration of gain and squelch, then exit')
+    parser.add_argument('--web-control', action='store_true',
+                        help='Start local web control UI on port 8080')
     args = parser.parse_args()
 
     # Load config
@@ -116,15 +122,40 @@ def main():
     print(f"\nAssigned: {facility_label} {freq_mhz:.3f} MHz "
           f"{facility.modulation.upper()}")
 
-    # Test mode -- exit after registration
+    # Calibration
+    calibrator = Calibrator(
+        device_index=config.node.device_index,
+        frequency_hz=facility.frequency_hz,
+        modulation=facility.modulation,
+        bias_tee=config.node.bias_tee,
+    )
+
+    if args.calibrate:
+        calibrator.run()
+        sys.exit(0)
+
+    # Load existing calibration or run it
+    cal = Calibrator.load_calibration()
+    if cal:
+        gain, squelch = cal
+        log.info("Using saved calibration",
+                 gain=gain, squelch=f"{squelch:.1f}")
+    else:
+        log.info("No calibration data found, running calibration")
+        gain, squelch = calibrator.run()
+
+    # Test mode -- exit after registration + calibration
     if args.test:
-        log.info("Test mode -- registration OK",
+        log.info("Test mode -- registration and calibration OK",
                  facility=facility_label,
                  frequency_mhz=f"{freq_mhz:.3f}",
-                 modulation=facility.modulation)
+                 modulation=facility.modulation,
+                 gain=gain,
+                 squelch=f"{squelch:.1f}")
         sys.exit(0)
 
     print(f"\n  Streaming to: {config.server.url}")
+    print(f"  Gain: {gain}  Squelch: {squelch:.1f} dBm")
     print(f"  Press Ctrl+C to stop\n")
 
     # Start streaming
@@ -133,11 +164,28 @@ def main():
         frequency_hz=facility.frequency_hz,
         modulation=facility.modulation,
         device_index=config.node.device_index,
-        gain=config.node.gain,
+        gain=gain,
         server_url=config.server.url,
         api_key=state.api_key,
         uploader=uploader,
     )
+
+    # Optionally start web control UI
+    if args.web_control:
+        try:
+            from web_control import start_web_control
+            web_thread = threading.Thread(
+                target=start_web_control,
+                args=(streamer, config, gain, squelch),
+                daemon=True,
+            )
+            web_thread.start()
+            log.info("Web control UI started on http://localhost:8080")
+            print("  Web control: http://localhost:8080\n")
+        except ImportError:
+            log.warning("Flask not installed, web control unavailable. "
+                        "Install with: pip3 install flask")
+
     streamer.run()
 
     log.info("Node stopped")
