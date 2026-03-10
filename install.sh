@@ -164,13 +164,13 @@ echo "  automatically based on coverage gaps near you."
 echo ""
 
 # SDR device index
-read -r -p "  SDR device index [0]: " DEVICE_INDEX
+read -r -p "  SDR device index [0]: " DEVICE_INDEX < /dev/tty
 DEVICE_INDEX="${DEVICE_INDEX:-0}"
 
 # Email (optional)
 echo ""
 echo "  Optional: link your email for free premium access."
-read -r -p "  Email address (Enter to skip): " EMAIL
+read -r -p "  Email address (Enter to skip): " EMAIL < /dev/tty
 
 # Location (optional — geocoded automatically)
 echo ""
@@ -181,7 +181,7 @@ LON=""
 LOCATION_DESC=""
 
 while true; do
-    read -r -p "  Street address or description (include city and state): " ADDRESS
+    read -r -p "  Street address or description (include city and state): " ADDRESS < /dev/tty
 
     # Empty = skip
     [ -z "$ADDRESS" ] && break
@@ -207,7 +207,7 @@ while true; do
         DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r '.[0].display_name' 2>/dev/null)
         echo "  Found 1 match:"
         echo "    1) ${DISPLAY_NAME}"
-        read -r -p "  Is this correct? [Y/n]: " CONFIRM
+        read -r -p "  Is this correct? [Y/n]: " CONFIRM < /dev/tty
         CONFIRM="${CONFIRM:-Y}"
         case "$CONFIRM" in
             [Nn]*)
@@ -226,7 +226,7 @@ while true; do
         done
         NONE_OPT=$((COUNT + 1))
         echo "    ${NONE_OPT}) None of these -- enter a different address"
-        read -r -p "  Select [1-${NONE_OPT}]: " PICK
+        read -r -p "  Select [1-${NONE_OPT}]: " PICK < /dev/tty
         PICK="${PICK:-0}"
         if [ "$PICK" -eq "$NONE_OPT" ] 2>/dev/null; then
             echo ""
