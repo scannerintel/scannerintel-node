@@ -181,7 +181,7 @@ LON=""
 LOCATION_DESC=""
 
 while true; do
-    read -r -p "  Street address or description (Enter to skip): " ADDRESS
+    read -r -p "  Street address or description (include city and state): " ADDRESS
 
     # Empty = skip
     [ -z "$ADDRESS" ] && break
@@ -201,24 +201,42 @@ while true; do
         continue
     fi
 
-    SELECTED=0
+    SELECTED=""
 
     if [ "$COUNT" -eq 1 ]; then
-        SELECTED=0
         DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r '.[0].display_name' 2>/dev/null)
-        echo "  ✓  Location: ${DISPLAY_NAME}"
+        echo "  Found 1 match:"
+        echo "    1) ${DISPLAY_NAME}"
+        read -r -p "  Is this correct? [Y/n]: " CONFIRM
+        CONFIRM="${CONFIRM:-Y}"
+        case "$CONFIRM" in
+            [Nn]*)
+                echo ""
+                continue
+                ;;
+            *)
+                SELECTED=0
+                ;;
+        esac
     else
         echo "  Multiple matches found:"
         for idx in $(seq 0 $((COUNT - 1))); do
             NAME=$(echo "$GEO_RESULT" | jq -r ".[$idx].display_name" 2>/dev/null)
             echo "    $((idx + 1))) ${NAME}"
         done
-        read -r -p "  Select [1-${COUNT}]: " PICK
-        PICK="${PICK:-1}"
-        if [ "$PICK" -ge 1 ] 2>/dev/null && [ "$PICK" -le "$COUNT" ] 2>/dev/null; then
+        NONE_OPT=$((COUNT + 1))
+        echo "    ${NONE_OPT}) None of these -- enter a different address"
+        read -r -p "  Select [1-${NONE_OPT}]: " PICK
+        PICK="${PICK:-0}"
+        if [ "$PICK" -eq "$NONE_OPT" ] 2>/dev/null; then
+            echo ""
+            continue
+        elif [ "$PICK" -ge 1 ] 2>/dev/null && [ "$PICK" -le "$COUNT" ] 2>/dev/null; then
             SELECTED=$((PICK - 1))
         else
-            SELECTED=0
+            echo "  Invalid selection. Try again."
+            echo ""
+            continue
         fi
     fi
 
