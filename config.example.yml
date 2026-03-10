@@ -11,7 +11,7 @@
 # State is stored in ~/.scannerintel/state.json.
 
 server:
-  url: https://scannerintel.com
+  url: https://api.scannerintel.com
 
 # Optional: link this node to your ScannerIntel account for free premium
 # email: you@example.com

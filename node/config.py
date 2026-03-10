@@ -29,7 +29,7 @@ class NodeConfig:
 
 @dataclass
 class ServerConfig:
-    url: str = 'https://scannerintel.com'
+    url: str = 'https://api.scannerintel.com'
 
 
 @dataclass
@@ -59,7 +59,7 @@ def load_config(path: Optional[str] = None) -> Config:
     # Server config
     srv = raw.get('server', {})
     server = ServerConfig(
-        url=srv.get('url', 'https://scannerintel.com'),
+        url=srv.get('url', 'https://api.scannerintel.com'),
     )
 
     # Node config

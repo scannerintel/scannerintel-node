@@ -5,7 +5,7 @@ REPO="https://raw.githubusercontent.com/scannerintel/scannerintel-node/main"
 INSTALL_DIR="/opt/scannerintel-node"
 CONFIG_DIR="/etc/scannerintel"
 SERVICE_USER="scannerintel"
-API_URL="https://scannerintel.com"
+API_URL="https://api.scannerintel.com"
 LOG="/tmp/scannerintel-install.log"
 
 > "$LOG"
