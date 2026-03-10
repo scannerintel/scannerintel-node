@@ -114,7 +114,7 @@ fi
 (
     mkdir -p "$INSTALL_DIR" >> "$LOG" 2>&1
     mkdir -p "$CONFIG_DIR" >> "$LOG" 2>&1
-    for f in main.py sdr.py chunker.py uploader.py streamer.py calibrate.py web_control.py classifier.py config.py logger.py; do
+    for f in main.py uploader.py streamer.py calibrate.py config.py logger.py; do
         curl -sSL "$REPO/node/$f" -o "$INSTALL_DIR/$f" >> "$LOG" 2>&1
     done
     # Also grab update.sh

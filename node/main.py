@@ -11,7 +11,6 @@ import hashlib
 import platform
 import argparse
 import time
-import threading
 from typing import Optional
 
 # Allow imports from the node package directory
@@ -80,8 +79,6 @@ def main():
                         help='Test hardware and registration, then exit')
     parser.add_argument('--calibrate', action='store_true',
                         help='Force recalibration of gain and squelch, then exit')
-    parser.add_argument('--web-control', action='store_true',
-                        help='Start local web control UI on port 8080')
     args = parser.parse_args()
 
     # Load config
@@ -181,22 +178,6 @@ def main():
         api_key=state.api_key,
         uploader=uploader,
     )
-
-    # Optionally start web control UI
-    if args.web_control:
-        try:
-            from web_control import start_web_control
-            web_thread = threading.Thread(
-                target=start_web_control,
-                args=(streamer, config, gain, squelch),
-                daemon=True,
-            )
-            web_thread.start()
-            log.info("Web control UI started on http://localhost:8080")
-            print("  Web control: http://localhost:8080\n")
-        except ImportError:
-            log.warning("Flask not installed, web control unavailable. "
-                        "Install with: pip3 install flask")
 
     streamer.run()
 
