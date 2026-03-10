@@ -175,27 +175,62 @@ read -r -p "  Email address (Enter to skip): " EMAIL
 # Location (optional — geocoded automatically)
 echo ""
 echo "  Location (helps place you on the coverage map)"
-read -r -p "  Street address or description (Enter to skip): " ADDRESS
 
 LAT=""
 LON=""
 LOCATION_DESC=""
 
-if [ -n "$ADDRESS" ]; then
+while true; do
+    read -r -p "  Street address or description (Enter to skip): " ADDRESS
+
+    # Empty = skip
+    [ -z "$ADDRESS" ] && break
+
     LOCATION_DESC="$ADDRESS"
     ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ADDRESS'))" 2>/dev/null || true)
-    if [ -n "$ENCODED" ]; then
-        GEO_RESULT=$(curl -s "https://nominatim.openstreetmap.org/search?q=$ENCODED&format=json&limit=1" \
-            -H "User-Agent: scannerintel-node-installer/1.0" 2>/dev/null || true)
-        LAT=$(echo "$GEO_RESULT" | jq -r '.[0].lat // empty' 2>/dev/null || true)
-        LON=$(echo "$GEO_RESULT" | jq -r '.[0].lon // empty' 2>/dev/null || true)
-        DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r '.[0].display_name // empty' 2>/dev/null || true)
+    if [ -z "$ENCODED" ]; then
+        break
+    fi
 
-        if [ -n "$LAT" ] && [ -n "$LON" ]; then
-            printf "  ✓  Location found: %s (%s, %s)\n" "$DISPLAY_NAME" "$LAT" "$LON"
+    GEO_RESULT=$(curl -s "https://nominatim.openstreetmap.org/search?q=$ENCODED&format=json&limit=5" \
+        -H "User-Agent: scannerintel-node-installer/1.0" 2>/dev/null || true)
+    COUNT=$(echo "$GEO_RESULT" | jq 'length' 2>/dev/null || echo "0")
+
+    if [ "$COUNT" -eq 0 ] || [ "$COUNT" = "" ]; then
+        echo "  No results found. Try a different address."
+        continue
+    fi
+
+    SELECTED=0
+
+    if [ "$COUNT" -eq 1 ]; then
+        SELECTED=0
+        DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r '.[0].display_name' 2>/dev/null)
+        echo "  ✓  Location: ${DISPLAY_NAME}"
+    else
+        echo "  Multiple matches found:"
+        for idx in $(seq 0 $((COUNT - 1))); do
+            NAME=$(echo "$GEO_RESULT" | jq -r ".[$idx].display_name" 2>/dev/null)
+            echo "    $((idx + 1))) ${NAME}"
+        done
+        read -r -p "  Select [1-${COUNT}]: " PICK
+        PICK="${PICK:-1}"
+        if [ "$PICK" -ge 1 ] 2>/dev/null && [ "$PICK" -le "$COUNT" ] 2>/dev/null; then
+            SELECTED=$((PICK - 1))
+        else
+            SELECTED=0
         fi
     fi
-fi
+
+    LAT=$(echo "$GEO_RESULT" | jq -r ".[$SELECTED].lat // empty" 2>/dev/null || true)
+    LON=$(echo "$GEO_RESULT" | jq -r ".[$SELECTED].lon // empty" 2>/dev/null || true)
+    DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r ".[$SELECTED].display_name // empty" 2>/dev/null || true)
+
+    if [ -n "$LAT" ] && [ -n "$LON" ]; then
+        printf "  ✓  Location set: %s (%s, %s)\n" "$DISPLAY_NAME" "$LAT" "$LON"
+    fi
+    break
+done
 
 echo ""
 
