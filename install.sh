@@ -172,15 +172,30 @@ echo ""
 echo "  Optional: link your email for free premium access."
 read -r -p "  Email address (Enter to skip): " EMAIL
 
-# Location description (optional)
+# Location (optional — geocoded automatically)
 echo ""
-read -r -p "  Location description (Enter to skip): " LOCATION_DESC
+echo "  Location (helps place you on the coverage map)"
+read -r -p "  Street address or description (Enter to skip): " ADDRESS
 
-# Latitude / Longitude (optional)
-echo ""
-echo "  Optional: coordinates for the coverage map."
-read -r -p "  Latitude (Enter to skip): " LAT
-read -r -p "  Longitude (Enter to skip): " LON
+LAT=""
+LON=""
+LOCATION_DESC=""
+
+if [ -n "$ADDRESS" ]; then
+    LOCATION_DESC="$ADDRESS"
+    ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ADDRESS'))" 2>/dev/null || true)
+    if [ -n "$ENCODED" ]; then
+        GEO_RESULT=$(curl -s "https://nominatim.openstreetmap.org/search?q=$ENCODED&format=json&limit=1" \
+            -H "User-Agent: scannerintel-node-installer/1.0" 2>/dev/null || true)
+        LAT=$(echo "$GEO_RESULT" | jq -r '.[0].lat // empty' 2>/dev/null || true)
+        LON=$(echo "$GEO_RESULT" | jq -r '.[0].lon // empty' 2>/dev/null || true)
+        DISPLAY_NAME=$(echo "$GEO_RESULT" | jq -r '.[0].display_name // empty' 2>/dev/null || true)
+
+        if [ -n "$LAT" ] && [ -n "$LON" ]; then
+            printf "  ✓  Location found: %s (%s, %s)\n" "$DISPLAY_NAME" "$LAT" "$LON"
+        fi
+    fi
+fi
 
 echo ""
 
