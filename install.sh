@@ -187,7 +187,7 @@ while true; do
     [ -z "$ADDRESS" ] && break
 
     LOCATION_DESC="$ADDRESS"
-    ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ADDRESS'))" 2>/dev/null || true)
+    ENCODED=$(printf '%s' "$ADDRESS" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read()))" 2>/dev/null || true)
     if [ -z "$ENCODED" ]; then
         break
     fi
@@ -300,7 +300,16 @@ spinner "Writing configuration..."
 
 # Build hardware fingerprint the same way the Python client does
 CPU_SERIAL=$(cat /proc/cpuinfo 2>/dev/null | grep "^Serial" | awk -F: '{print $2}' | tr -d ' ' || true)
-MAC_ADDR=$(cat /sys/class/net/eth0/address 2>/dev/null || true)
+MAC_ADDR=""
+for iface in /sys/class/net/*/address; do
+    iface_name=$(basename "$(dirname "$iface")")
+    [ "$iface_name" = "lo" ] && continue
+    mac=$(cat "$iface" 2>/dev/null || true)
+    if [ -n "$mac" ] && [ "$mac" != "00:00:00:00:00:00" ]; then
+        MAC_ADDR="$mac"
+        break
+    fi
+done
 
 if [ -n "$CPU_SERIAL" ] || [ -n "$MAC_ADDR" ]; then
     FP_INPUT=""

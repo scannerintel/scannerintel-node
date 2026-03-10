@@ -1,3 +1,4 @@
+import re
 import requests
 import json
 import os
@@ -7,6 +8,9 @@ from typing import Optional, List, Dict
 
 
 STATE_FILE = os.path.expanduser('~/.scannerintel/state.json')
+
+# Only allow safe characters in stream keys
+_STREAM_KEY_PATTERN = re.compile(r'^[a-zA-Z0-9_\-]+$')
 
 
 @dataclass
@@ -63,9 +67,13 @@ class Uploader:
         facility = None
         af = data.get('assigned_facility')
         if af:
+            stream_key = af.get('stream_key', '')
+            if not _STREAM_KEY_PATTERN.match(stream_key):
+                raise ValueError(
+                    f"Server returned invalid stream_key: {stream_key!r}")
             facility = AssignedFacility(
                 frequency_hz=af.get('frequency_hz'),
-                stream_key=af.get('stream_key'),
+                stream_key=stream_key,
                 modulation=af.get('modulation', 'am'),
                 name=af.get('facility_name'),
             )
@@ -116,8 +124,10 @@ class Uploader:
             return None
 
     def _save_state(self, state: NodeState):
-        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-        with open(STATE_FILE, 'w') as f:
+        state_dir = os.path.dirname(STATE_FILE)
+        os.makedirs(state_dir, mode=0o700, exist_ok=True)
+        fd = os.open(STATE_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
             json.dump({
                 'device_id': state.device_id,
                 'api_key': state.api_key,

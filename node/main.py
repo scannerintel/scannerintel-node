@@ -10,7 +10,7 @@ import os
 import hashlib
 import platform
 import argparse
-import subprocess
+import time
 import threading
 from typing import Optional
 
@@ -49,12 +49,16 @@ def get_hardware_fingerprint() -> str:
 
     # MAC address of first non-loopback interface
     try:
-        result = subprocess.run(
-            ['cat', '/sys/class/net/eth0/address'],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            components.append(result.stdout.strip())
+        net_dir = '/sys/class/net'
+        for iface in sorted(os.listdir(net_dir)):
+            if iface == 'lo':
+                continue
+            addr_path = os.path.join(net_dir, iface, 'address')
+            with open(addr_path) as f:
+                mac = f.read().strip()
+            if mac and mac != '00:00:00:00:00:00':
+                components.append(mac)
+                break
     except Exception:
         pass
 
@@ -96,18 +100,26 @@ def main():
     fingerprint = get_hardware_fingerprint()
 
     log.info("Registering node with ScannerIntel")
-    try:
-        state = uploader.register(
-            hardware_fingerprint=fingerprint,
-            email=config.email,
-            lat=config.node.location.lat,
-            lon=config.node.location.lon,
-            description=config.node.location.description,
-        )
-        log.info("Node registered", device_id=state.device_id)
-    except Exception as e:
-        log.error("Registration failed", error=str(e))
-        sys.exit(1)
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            state = uploader.register(
+                hardware_fingerprint=fingerprint,
+                email=config.email,
+                lat=config.node.location.lat,
+                lon=config.node.location.lon,
+                description=config.node.location.description,
+            )
+            log.info("Node registered", device_id=state.device_id)
+            break
+        except Exception as e:
+            if attempt == max_retries:
+                log.error("Registration failed after retries", error=str(e))
+                sys.exit(1)
+            delay = min(2 ** attempt, 60)
+            log.warning("Registration failed, retrying",
+                        attempt=attempt, delay=delay, error=str(e))
+            time.sleep(delay)
 
     # Check if server assigned a facility
     if not state.facility:

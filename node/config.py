@@ -77,11 +77,25 @@ def load_config(path: Optional[str] = None) -> Config:
         ),
     )
 
-    if not 0 <= node.gain <= 49:
-        raise ValueError("node.gain must be between 0 and 49")
+    if not isinstance(node.gain, (int, float)) or not 0 <= node.gain <= 49:
+        raise ValueError("node.gain must be a number between 0 and 49")
+
+    if not isinstance(node.device_index, int) or node.device_index < 0:
+        raise ValueError("node.device_index must be a non-negative integer")
+
+    if not isinstance(node.sample_rate, int) or node.sample_rate <= 0:
+        raise ValueError("node.sample_rate must be a positive integer")
+
+    url = server.url
+    if not url.startswith('https://'):
+        raise ValueError("server.url must use HTTPS")
+
+    email = raw.get('email')
+    if email is not None and not isinstance(email, str):
+        raise ValueError("email must be a string")
 
     return Config(
         server=server,
         node=node,
-        email=raw.get('email'),
+        email=email,
     )

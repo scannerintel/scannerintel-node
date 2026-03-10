@@ -1,8 +1,7 @@
-import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 from sdr import SDRDevice
-from config import ChannelConfig, NodeConfig
 
 
 @dataclass
@@ -18,28 +17,33 @@ class AudioChunk:
 
 
 class Chunker:
-    def __init__(self, sdr: SDRDevice, node_config: NodeConfig):
+    def __init__(self, sdr: SDRDevice, frequency_hz: int, modulation: str,
+                 chunk_duration: int = 10, squelch: float = -40.0):
         self.sdr = sdr
-        self.config = node_config
+        self.frequency_hz = frequency_hz
+        self.modulation = modulation
+        self.chunk_duration = chunk_duration
+        self.squelch = squelch
 
-    def capture(self, channel: ChannelConfig) -> AudioChunk:
-        """Capture one chunk from a channel. Returns chunk with is_silence flag."""
-        start_ts = datetime.datetime.utcnow().isoformat() + 'Z'
+    def capture(self) -> AudioChunk:
+        """Capture one chunk from the configured frequency. Returns chunk with is_silence flag."""
+        start_ts = datetime.now(timezone.utc).isoformat()
+        freq_mhz = self.frequency_hz / 1e6
 
         wav_bytes, power_db = self.sdr.record_chunk(
-            frequency_mhz=channel.frequency,
-            modulation=channel.modulation,
-            duration_seconds=self.config.chunk_duration,
+            frequency_mhz=freq_mhz,
+            modulation=self.modulation,
+            duration_seconds=self.chunk_duration,
         )
 
-        is_silence = power_db < self.config.squelch
+        is_silence = power_db < self.squelch
 
         return AudioChunk(
-            channel_index=channel.index,
-            frequency_hz=int(channel.frequency * 1e6),
-            modulation=channel.modulation,
+            channel_index=0,
+            frequency_hz=self.frequency_hz,
+            modulation=self.modulation,
             wav_bytes=wav_bytes,
-            duration_ms=self.config.chunk_duration * 1000,
+            duration_ms=self.chunk_duration * 1000,
             signal_power_db=power_db,
             timestamp=start_ts,
             is_silence=is_silence,

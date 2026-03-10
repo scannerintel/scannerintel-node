@@ -10,7 +10,7 @@ from typing import List, Dict, Tuple
 
 class SDRDevice:
     def __init__(self, device_index: int, gain: float, sample_rate: int,
-                 bias_tee: bool = True):
+                 bias_tee: bool = False):
         self.device_index = device_index
         self.gain = gain
         self.sample_rate = sample_rate

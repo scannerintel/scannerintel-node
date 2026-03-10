@@ -20,6 +20,11 @@ _streamer_ref = None
 _config_ref = None
 _current_gain = 0
 _current_squelch = 0.0
+_stream_lock = threading.Lock()
+
+VALID_MODULATIONS = {'am', 'fm', 'wbfm', 'usb', 'lsb'}
+MIN_FREQUENCY_HZ = 24_000_000    # 24 MHz (RTL-SDR lower bound)
+MAX_FREQUENCY_HZ = 1_766_000_000  # 1766 MHz (RTL-SDR upper bound)
 
 HTML_PAGE = """<!DOCTYPE html>
 <html>
@@ -182,51 +187,73 @@ def create_app():
 
     @app.route('/api/stop', methods=['POST'])
     def api_stop():
-        if _streamer_ref and _streamer_ref._running:
-            _streamer_ref._running = False
-            _streamer_ref._stop_pipeline()
-            _log_lines.append("Stream stopped via web control")
-            return jsonify(ok=True)
-        return jsonify(error="Not running")
+        with _stream_lock:
+            if _streamer_ref and _streamer_ref._running:
+                _streamer_ref._running = False
+                _streamer_ref._stop_pipeline()
+                _log_lines.append("Stream stopped via web control")
+                return jsonify(ok=True)
+            return jsonify(error="Not running")
 
     @app.route('/api/start', methods=['POST'])
     def api_start():
-        if _streamer_ref and not _streamer_ref._running:
-            _streamer_ref._running = True
-            t = threading.Thread(target=_restart_stream, daemon=True)
-            t.start()
-            _log_lines.append("Stream started via web control")
-            return jsonify(ok=True)
-        return jsonify(error="Already running")
+        with _stream_lock:
+            if _streamer_ref and not _streamer_ref._running:
+                _streamer_ref._running = True
+                t = threading.Thread(target=_restart_stream, daemon=True)
+                t.start()
+                _log_lines.append("Stream started via web control")
+                return jsonify(ok=True)
+            return jsonify(error="Already running")
 
     @app.route('/api/retune', methods=['POST'])
     def api_retune():
         data = request.get_json()
+        if not data:
+            return jsonify(error="Invalid JSON"), 400
+
         freq = data.get('frequency_hz')
         mod = data.get('modulation', 'am')
 
         if not freq:
-            return jsonify(error="frequency_hz required")
+            return jsonify(error="frequency_hz required"), 400
+
+        try:
+            freq = int(freq)
+        except (ValueError, TypeError):
+            return jsonify(error="frequency_hz must be an integer"), 400
+
+        if not (MIN_FREQUENCY_HZ <= freq <= MAX_FREQUENCY_HZ):
+            return jsonify(
+                error=f"frequency_hz must be between {MIN_FREQUENCY_HZ} "
+                      f"and {MAX_FREQUENCY_HZ}"
+            ), 400
+
+        if mod not in VALID_MODULATIONS:
+            return jsonify(
+                error=f"modulation must be one of: {', '.join(sorted(VALID_MODULATIONS))}"
+            ), 400
 
         streamer = _streamer_ref
         if not streamer:
             return jsonify(error="No streamer active")
 
-        # Stop current pipeline
-        streamer._running = False
-        streamer._stop_pipeline()
+        with _stream_lock:
+            # Stop current pipeline
+            streamer._running = False
+            streamer._stop_pipeline()
 
-        # Update frequency and modulation
-        streamer.frequency_hz = int(freq)
-        streamer.modulation = mod
-        streamer._running = True
+            # Update frequency and modulation
+            streamer.frequency_hz = freq
+            streamer.modulation = mod
+            streamer._running = True
 
-        _log_lines.append(f"Retuned to {int(freq)} Hz {mod.upper()}")
+            _log_lines.append(f"Retuned to {freq} Hz {mod.upper()}")
 
-        t = threading.Thread(target=_restart_stream, daemon=True)
-        t.start()
+            t = threading.Thread(target=_restart_stream, daemon=True)
+            t.start()
 
-        return jsonify(ok=True, frequency_hz=int(freq), modulation=mod)
+        return jsonify(ok=True, frequency_hz=freq, modulation=mod)
 
     return app
 
@@ -245,6 +272,10 @@ def _restart_stream():
     try:
         streamer._start_pipeline()
         streamer._watch_segments()
+    except Exception as e:
+        log.error("Stream pipeline failed", error=str(e))
+        _log_lines.append(f"Pipeline error: {e}")
+        streamer._running = False
     finally:
         streamer._stop_pipeline()
         if os.path.exists(streamer.tmp_dir):
@@ -260,4 +291,4 @@ def start_web_control(streamer, config, gain, squelch):
     _current_squelch = squelch
 
     app = create_app()
-    app.run(host='0.0.0.0', port=8080, use_reloader=False)
+    app.run(host='127.0.0.1', port=8080, use_reloader=False)

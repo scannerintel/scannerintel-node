@@ -176,7 +176,8 @@ class Calibrator:
 
     def _save_calibration(self, gain: float, squelch: float):
         """Save calibrated values to state.json."""
-        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        state_dir = os.path.dirname(STATE_FILE)
+        os.makedirs(state_dir, mode=0o700, exist_ok=True)
 
         state = {}
         try:
@@ -188,7 +189,8 @@ class Calibrator:
         state['calibrated_gain'] = gain
         state['calibrated_squelch'] = squelch
 
-        with open(STATE_FILE, 'w') as f:
+        fd = os.open(STATE_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as f:
             json.dump(state, f)
 
     @staticmethod

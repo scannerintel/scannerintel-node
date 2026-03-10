@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class StructuredLogger:
@@ -9,7 +9,7 @@ class StructuredLogger:
 
     def _write(self, level: str, message: str, **kwargs):
         entry = {
-            'ts': datetime.utcnow().isoformat() + 'Z',
+            'ts': datetime.now(timezone.utc).isoformat(),
             'level': level,
             'logger': self.name,
             'msg': message,

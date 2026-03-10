@@ -103,7 +103,7 @@ class Streamer:
 
     def _watch_segments(self):
         """Poll temp dir for new .ts files and upload them."""
-        uploaded = set()
+        uploaded = {}  # filename -> segment_index, capped to prevent memory leak
         segment_index = 0
         freq_mhz = self.frequency_hz / 1e6
 
@@ -128,6 +128,12 @@ class Streamer:
 
             ts_files = sorted(f for f in files
                               if f.endswith('.ts') and f not in uploaded)
+
+            # Prune tracking dict to prevent unbounded growth on long runs
+            if len(uploaded) > 100:
+                current_files = set(files)
+                uploaded = {k: v for k, v in uploaded.items()
+                            if k in current_files}
 
             for ts_file in ts_files:
                 ts_path = os.path.join(self.tmp_dir, ts_file)
@@ -159,7 +165,7 @@ class Streamer:
                                 segment_index=segment_index,
                                 timestamp=ts_now)
 
-                uploaded.add(ts_file)
+                uploaded[ts_file] = segment_index
                 segment_index += 1
 
             time.sleep(2)
