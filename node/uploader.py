@@ -88,8 +88,8 @@ class Uploader:
         return state
 
     def upload_segment(self, stream_key: str, segment_index: int,
-                       segment_bytes: bytes, duration_ms: int) -> bool:
-        """Upload an HLS segment. Returns True on success."""
+                       segment_bytes: bytes, duration_ms: int) -> dict:
+        """Upload an HLS segment. Returns dict with 'ok' bool and 'error' string on failure."""
         if not self.state:
             raise RuntimeError("Node not registered. Call register() first.")
 
@@ -106,14 +106,54 @@ class Uploader:
                 },
                 timeout=30,
             )
-            return resp.status_code == 200
+            if resp.status_code == 200:
+                return {'ok': True}
+            # Return the status and body so the caller can log it
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text[:200]
+            return {'ok': False, 'error': f'HTTP {resp.status_code}: {body}'}
 
-        except requests.exceptions.ConnectionError:
-            return False
+        except requests.exceptions.ConnectionError as e:
+            return {'ok': False, 'error': f'connection failed: {e}'}
         except requests.exceptions.Timeout:
+            return {'ok': False, 'error': 'request timed out (30s)'}
+        except Exception as e:
+            return {'ok': False, 'error': f'unexpected: {e}'}
+
+    def heartbeat(self) -> bool:
+        """Send a heartbeat and ship buffered logs to the server."""
+        if not self.state:
             return False
+        try:
+            resp = self.session.post(
+                f'{self.server_url}/api/v1/nodes/heartbeat',
+                headers={'Authorization': f'Bearer {self.state.api_key}'},
+                json={'status': 'streaming'},
+                timeout=10,
+            )
+            # Ship buffered logs after heartbeat
+            self._ship_logs()
+            return resp.status_code == 200
         except Exception:
             return False
+
+    def _ship_logs(self):
+        """Send buffered log entries to the server."""
+        from logger import StructuredLogger
+        entries = StructuredLogger.drain()
+        if not entries or not self.state:
+            return
+        try:
+            self.session.post(
+                f'{self.server_url}/api/v1/nodes/logs',
+                headers={'Authorization': f'Bearer {self.state.api_key}'},
+                json={'logs': entries},
+                timeout=10,
+            )
+        except Exception:
+            pass  # Best-effort — don't crash if log shipping fails
 
     def _load_state(self) -> Optional[NodeState]:
         try:

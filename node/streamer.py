@@ -106,6 +106,7 @@ class Streamer:
         uploaded = {}  # filename -> segment_index, capped to prevent memory leak
         segment_index = 0
         freq_mhz = self.frequency_hz / 1e6
+        last_heartbeat = 0
 
         log.info("Watching for HLS segments", tmp_dir=self.tmp_dir)
 
@@ -146,7 +147,7 @@ class Streamer:
                 if not segment_bytes:
                     continue
 
-                success = self.uploader.upload_segment(
+                result = self.uploader.upload_segment(
                     stream_key=self.stream_key,
                     segment_index=segment_index,
                     segment_bytes=segment_bytes,
@@ -154,7 +155,7 @@ class Streamer:
                 )
 
                 ts_now = datetime.now(timezone.utc).isoformat()
-                if success:
+                if result['ok']:
                     log.info("Segment uploaded",
                              frequency_mhz=f"{freq_mhz:.3f}",
                              segment_index=segment_index,
@@ -163,10 +164,17 @@ class Streamer:
                     log.warning("Segment upload failed",
                                 frequency_mhz=f"{freq_mhz:.3f}",
                                 segment_index=segment_index,
+                                error=result.get('error', 'unknown'),
                                 timestamp=ts_now)
 
                 uploaded[ts_file] = segment_index
                 segment_index += 1
+
+            # Send heartbeat every 60 seconds
+            now = time.monotonic()
+            if now - last_heartbeat >= 60:
+                self.uploader.heartbeat()
+                last_heartbeat = now
 
             time.sleep(2)
 
